@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="EN-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <title>Munkiki's Castle</title>
+    <meta name="title" content="Munkiki's Castle">
+    <meta name="description" content="Munkiki's Castle - PC port of the 2005 Nokia 3410 game, running in the browser (WebAssembly)">
+    <meta name="keywords" content="raylib, emscripten, webassembly, wasm, C, game, munkiki, castle">
+    <meta name="viewport" content="width=device-width">
+
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="https://www.raylib.com/favicon.ico">
+
+    <style>
+        html, body { height: 100%; }
+        body {
+            margin: 0; overflow: hidden; background: #101010; color: #bbb;
+            font: 13px/1.7 monospace;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 10px;
+        }
+        h1 { margin: 0; font-size: 15px; font-weight: normal; letter-spacing: .15em; color: #ddd; }
+        /* The game draws the original 96x65 LCD at x3: keep it crisp and centered. */
+        canvas.emscripten {
+            display: block; background: #000; outline: none;
+            image-rendering: pixelated; image-rendering: crisp-edges;
+            height: min(64vh, 585px); max-width: 94vw;
+        }
+        #controls { max-width: 92vw; text-align: center; color: #8a8a8a; }
+        #controls b { color: #d0d0d0; font-weight: normal; }
+    </style>
+  </head>
+  <body>
+    <h1>MUNKIKI'S CASTLE</h1>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    <div id="controls">
+        <b>&uarr;/W</b> step forward &middot;
+        <b>&darr;/S</b> step back &middot;
+        <b>&larr;/A &rarr;/D</b> turn &middot;
+        <b>F</b> push block &middot;
+        <b>E</b> smash block &middot;
+        <b>R</b> or <b>/</b> restart level &middot;
+        <b>-</b> free camera<br>
+        <b>1-9</b> phone keypad &middot;
+        <b>Enter</b> Select &middot;
+        <b>Backspace</b> Back &middot;
+        <b>F8</b> dithering &middot;
+        click once for sound &middot; progress saves in your browser
+    </div>
+    <script>
+        // Progress saves persist through IndexedDB: at startup every stored
+        // file is written into the FS under /persist (main.c chdir()s there),
+        // and the directory is flushed back on a timer / tab hide / unload.
+        // Hand-rolled because emscripten's own IDBFS is gone in 6.x, while
+        // plain FS readFile/writeFile APIs are stable.
+        const DB_NAME = 'munkiki-castle-saves', STORE = 'files';
+        function idb_open() {
+            return new Promise((res, rej) => {
+                const r = indexedDB.open(DB_NAME, 1);
+                r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: 'name' });
+                r.onsuccess = () => res(r.result);
+                r.onerror = () => rej(r.error);
+            });
+        }
+        function mk_flush() {
+            let names;
+            try { names = FS.readdir('/persist').filter((n) => n !== '.' && n !== '..'); }
+            catch (e) { return; }
+            if (!names.length) return;
+            idb_open().then((db) => {
+                const st = db.transaction(STORE, 'readwrite').objectStore(STORE);
+                for (const n of names) st.put({ name: n, data: FS.readFile('/persist/' + n) });
+            }).catch((e) => console.error('save flush failed', e));
+        }
+        var Module = {
+            canvas: (function () { return document.getElementById('canvas'); })(),
+            preRun: [function () {
+                Module.addRunDependency('save-load');   // hold main() until loaded
+                FS.mkdir('/persist');
+                window.MK_FS = FS;                     // debugging helper
+                idb_open().then((db) => new Promise((resolve, reject) => {
+                    const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+                    req.onsuccess = () => {
+                        for (const rec of req.result)
+                            FS.writeFile('/persist/' + rec.name, new Uint8Array(rec.data));
+                        resolve();
+                    };
+                    req.onerror = () => reject(req.error);
+                })).catch((e) => console.error('save load failed', e))
+                  .then(() => Module.removeRunDependency('save-load'));
+            }],
+        };
+        setInterval(mk_flush, 2000);
+        document.addEventListener('visibilitychange', function () { if (document.hidden) mk_flush(); });
+        window.addEventListener('beforeunload', mk_flush);
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>

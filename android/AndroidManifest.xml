@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.munkiki.castle"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <!-- NativeActivity (built-in, android:hasCode="false" -> no Java/Kotlin):
+         the whole app is libmain.so compiled from src/ + raylib. -->
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="36"/>
+
+    <application
+        android:label="Munkiki's Castle"
+        android:icon="@mipmap/icon"
+        android:hasCode="false">
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize|density">
+            <meta-data android:name="android.app.lib_name" android:value="main"/>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
