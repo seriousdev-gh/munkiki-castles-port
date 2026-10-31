@@ -7,6 +7,10 @@ collecting coins, trying not to fall down while moving on a grid-based system.
 
 ![Munkiki's Castles, PC port](screenshot.png)
 
+**Play in the browser:** <https://seriousdev-gh.github.io/munkiki-castles-port/>
+(built automatically from this repo via GitHub Pages; click the canvas once to
+unlock sound).
+
 This repository is a faithful PC port of that game. The original was written
 for the Nokia 3410's M3D(O) hardware 3D engine on a 96x65 monochrome LCD; the
 port reimplements the whole pipeline — fixed-point 16.16 matrices, winding

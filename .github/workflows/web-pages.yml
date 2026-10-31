@@ -1,0 +1,70 @@
+# Build the HTML5/WASM port and publish it to GitHub Pages.
+# Mirrors docs/building.md "Web build": pinned raylib in vendor/raylib,
+# bootstrap nob, `nob web` (emcc found through $EMSDK). The site is the
+# build-web output with munkiki.html served as index.html.
+name: web -> GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write    # lets configure/deploy-pages create and publish the site
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch raylib (pinned to the commit this port is verified against)
+        uses: actions/checkout@v4
+        with:
+          repository: raysan5/raylib
+          ref: 1026cb96452e6cf2ccfe5af5c44b1992d0ffae29
+          path: vendor/raylib
+
+      - name: Install Emscripten SDK (same version as the local build)
+        run: |
+          git clone --depth 1 --branch 6.0.13 \
+            https://github.com/emscripten-core/emsdk "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.13
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.13
+
+      - name: Build web target (nob web -> build-web/)
+        run: |
+          mkdir -p build-nob
+          cc -O1 -o build-nob/nob nob.c
+          EMSDK="$RUNNER_TEMP/emsdk" ./build-nob/nob web
+
+      - name: Assemble Pages site
+        run: |
+          mkdir site
+          cp build-web/munkiki.html site/index.html
+          cp build-web/munkiki.js site/munkiki.js
+          cp build-web/munkiki.wasm site/munkiki.wasm
+
+      - uses: actions/configure-pages@v4
+        with:
+          path: site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

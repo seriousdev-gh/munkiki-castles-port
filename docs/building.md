@@ -77,6 +77,13 @@ raudio) into `build-web\libraylib.a` (wiki step 2.1), then links the game
 against emscripten's GLFW port with our own page ([../web/shell.html](../web/shell.html)):
 centered LCD canvas plus the key legend below it.
 
+Every push to `main` builds this on GitHub Actions and publishes it as GitHub
+Pages at <https://seriousdev-gh.github.io/munkiki-castles-port/>
+([.github/workflows/web-pages.yml](../.github/workflows/web-pages.yml)). The
+workflow pins the same Emscripten version as the local build (6.0.13) and the
+same raylib commit above, and serves `munkiki.html` as the site's
+`index.html`.
+
 Progress saves work in the browser: `web/shell.html` seeds an IndexedDB-backed
 `/persist` directory before the game starts and `main.c` runs from there, so
 the usual `KKM.rms`/`OPT.rms` round-trip survives reloads (the menu gains its
