@@ -49,7 +49,6 @@ enum { CN_NONE = 0, CN_WALK = 1, CN_TURNL = 2, CN_TURNR = 3, CN_UP = 4,
 int8_t  mk_b1[13];
 uint8_t mk_b0[64];
 uint8_t mk_bw[1285];
-int     mk_type_cell_count[13];              // short[] b_
 uint8_t mk_cm[17][24];
 int     mk_cm_len[17];
 uint8_t mk_level_ids[MK_LEVELS];
@@ -162,7 +161,6 @@ static int decode_level_by_id(int level)
     block_count = 0;
     g_dungeon.level_keys = 0;
     g_dungeon.level_notes = 0;
-    for (int j = 0; j < 13; j++) mk_type_cell_count[j] = 0;
 
     g_dungeon.bit_pos = 0;
     g_dungeon.bit_byte = read_stream_byte();               // pre-read first byte
@@ -173,7 +171,6 @@ static int decode_level_by_id(int level)
         if (read_bits(1)) {
             int cell_bits = mk_b1[t];  // byte
             if (480 & (1 << t)) {
-                mk_type_cell_count[t] = 1;
                 int cell_x = read_bits(4), cell_h = read_bits(3), cell_z = read_bits(4);
                 if (!g_dungeon.extra_life || cell_bits != 32) {
                     int cell = cell_ix(cell_x, cell_h, cell_z);
@@ -207,9 +204,8 @@ static int decode_level_by_id(int level)
                             for (int x = x0; x <= x1; x++) {
                                 if (solid_rect || read_bits(1) == 1) {
                                     mk_cl[row_base + x] = (int8_t)(mk_cl[row_base + x] | cell_bits);
-                                    if (cell_bits & MK_CELL_SHAPE_MASK) { mk_type_cell_count[t]++; block_count++; }
+                                    if (cell_bits & MK_CELL_SHAPE_MASK) block_count++;
                                     if (cell_bits & MK_CELL_ITEM_MASK) {
-                                        mk_type_cell_count[t]++;
                                         g_dungeon.level_keys++;
                                         if (cell_bits == 8) g_dungeon.level_notes++;
                                     }
@@ -251,6 +247,34 @@ static int decode_level_by_id(int level)
 }
 
 // ------------------------------------------------------------------- ap() save
+static int bit_count8(int v)
+{
+    v &= 0xFF;
+    int n = 0;
+    while (v) { v &= v - 1; n++; }
+    return n;
+}
+
+// Does the single-placement type `cell_bits` own this cell? The four
+// single-placement values overlap as bit SUBSETS (spawn 40 = note|life,
+// warp 24 = note+key), and the format carries exactly one (x,y,z) triple
+// per single placement type, restored by a single OR. So the widest
+// single-placement type fully contained in the cell must write the
+// triple; writing every subset match (life under the spawn marker, key
+// bits under a warp) would leave the decoder reading one triple and
+// desyncing every later type out of the stream.
+static int single_owner(int cell_val, int cell_bits)
+{
+    if ((cell_val & cell_bits) != cell_bits) return 0;
+    for (int u = 5; u <= 8; u++) {
+        int ubits = mk_b1[u];
+        if (ubits == cell_bits) continue;
+        if ((cell_val & ubits) == ubits && bit_count8(ubits) > bit_count8(cell_bits))
+            return 0;
+    }
+    return 1;
+}
+
 static int encode_run_state(uint8_t *out, int cap)
 {
     // mirror of ap(): spawn marker uses ce/cd/cc position at save time
@@ -263,22 +287,34 @@ static int encode_run_state(uint8_t *out, int cap)
     write_bits(out, g_dungeon.par_moves, 16);
 
     for (int t = 0; t < 13; t++) {
-        if (mk_type_cell_count[t] == 0) {
-            write_bits(out, 0, 1);
+        int cell_bits = mk_b1[t];
+        // Type presence comes from a live mk_cl scan, NOT from the
+        // decode-time mk_type_cell_count: gameplay (pickups, smash,
+        // pushing) changes which cells exist, and the count never counted
+        // the 64/128 channel types at all (neither shape nor item bits),
+        // so flagging from it dropped those cells from every save and
+        // wrote a present-flag for picked-up items whose scan then
+        // emitted no bits - both desync the bit-tied stream.
+        if (480 & (1 << t)) {
+            // single placement type: original ap() scans cl cells for the
+            // marker; for spawn (40) the live position is ce/cd/cc, which is
+            // exactly what cl holds (the marker moves with the monkey, see
+            // the spawn-marker update; ax() sets cf before ap()).
+            int at = -1;
+            for (int i = 0; i < 2048; i++) {
+                if (single_owner(mk_cl[i], cell_bits)) { at = i; break; }
+            }
+            write_bits(out, at >= 0, 1);
+            if (at >= 0) {
+                int x = at & 15, z = (at >> 4) & 15, y = (at >> 8) & 7;
+                write_bits(out, x, 4); write_bits(out, y, 3); write_bits(out, z, 4);
+            }
         } else {
-            write_bits(out, 1, 1);
-            int cell_bits = mk_b1[t];
-            if (480 & (1 << t)) {
-                // single placement types: original ap() scans cl cells for the
-                // marker; for spawn (40) the live position is ce/cd/cc, which is
-                // exactly what was stored (see ax() setting cf before ap()).
-                for (int i = 0; i < 2048; i++) {
-                    if ((mk_cl[i] & cell_bits) == cell_bits) {
-                        int x = i & 15, z = (i >> 4) & 15, y = (i >> 8) & 7;
-                        write_bits(out, x, 4); write_bits(out, y, 3); write_bits(out, z, 4);
-                    }
-                }
-            } else {
+            int any = 0;
+            for (int i = 0; i < 2048; i++)
+                if ((mk_cl[i] & cell_bits) == cell_bits) { any = 1; break; }
+            write_bits(out, any, 1);
+            if (any) {
                 for (int y = 0; y < MK_GRID_H; y++) {
                     int has = 0, minz = 10000, maxz = 0, minx = 10000, maxx = 0;
                     for (int z = 0; z < MK_GRID_D; z++)
@@ -353,7 +389,6 @@ int mk_decode_level(const uint8_t *p, int len)
     memset(mk_cl, 0, sizeof(mk_cl));
     memset(mk_ck, 0, sizeof(mk_ck));
     g_dungeon.moving_n = 0; block_count = 0; g_dungeon.level_keys = 0; g_dungeon.level_notes = 0;
-    for (int j = 0; j < 13; j++) mk_type_cell_count[j] = 0;
     g_dungeon.bit_pos = 0; g_dungeon.bit_byte = read_stream_byte();
     g_dungeon.facing_loaded = read_bits(2);
     g_dungeon.par_moves = read_bits(16);
@@ -361,7 +396,6 @@ int mk_decode_level(const uint8_t *p, int len)
         if (read_bits(1)) {
             int cell_bits = mk_b1[t];
             if (480 & (1 << t)) {
-                mk_type_cell_count[t] = 1;
                 int cell_x = read_bits(4), cell_h = read_bits(3), cell_z = read_bits(4);
                 if (!g_dungeon.extra_life || cell_bits != 32) {
                     int cell = cell_ix(cell_x, cell_h, cell_z);
@@ -393,8 +427,8 @@ int mk_decode_level(const uint8_t *p, int len)
                             for (int x = x0; x <= x1; x++) {
                                 if (solid_rect || read_bits(1) == 1) {
                                     mk_cl[row_base + x] = (int8_t)(mk_cl[row_base + x] | cell_bits);
-                                    if (cell_bits & MK_CELL_SHAPE_MASK) { mk_type_cell_count[t]++; block_count++; }
-                                    if (cell_bits & MK_CELL_ITEM_MASK) { mk_type_cell_count[t]++; g_dungeon.level_keys++; if (cell_bits == 8) g_dungeon.level_notes++; }
+                                    if (cell_bits & MK_CELL_SHAPE_MASK) block_count++;
+                                    if (cell_bits & MK_CELL_ITEM_MASK) { g_dungeon.level_keys++; if (cell_bits == 8) g_dungeon.level_notes++; }
                                 }
                             }
                         }

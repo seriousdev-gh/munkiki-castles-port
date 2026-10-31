@@ -107,6 +107,34 @@ int main(int argc, char **argv)
         }
         printf("\n");
         printf("diag block_n=%d\n", g_scene.block_n);
+        /* Save/resume gate for the showroom: mk_diag_level overwrites the
+           decoded L1 grid AFTER the level-load checkpoint, so the only world
+           that reaches KKM.rms is the showroom - and it must come back
+           cell-identical AND at the same cell. A showroom that never placed
+           the (40) spawn marker into cl saved no respawn cell: Continue
+           then resumed the monkey at stale/zero spawn_dat (the "wrong place
+           after Continue" bug). The resume also rebuilds every block/billboard
+           record from the decoded grid, so the item gates below run against
+           the RESUMED world. */
+        {
+            static int8_t snap[2048];
+            int px = g_dungeon.pos_x, ph = g_dungeon.pos_h, pz = g_dungeon.pos_z;
+            memcpy(snap, mk_cl, sizeof snap);
+            mk_save_run();
+            /* a fresh process resumes with zeroed statics: a save that does
+               not carry the (40) marker would respawn the monkey there */
+            g_dungeon.spawn_dat_x = g_dungeon.spawn_dat_h = g_dungeon.spawn_dat_z = 0;
+            mk_resume_run();
+            int dcl = 0;
+            for (int i = 0; i < 2048; i++) if (snap[i] != mk_cl[i]) dcl++;
+            int same = g_dungeon.pos_x == px && g_dungeon.pos_h == ph &&
+                       g_dungeon.pos_z == pz;
+            printf("diag save/resume: cells_diff=%d pos_restored=%d pos(%d,%d,%d)\n",
+                   dcl, same, g_dungeon.pos_x >> 16, g_dungeon.pos_h >> 16,
+                   g_dungeon.pos_z >> 16);
+            if (dcl || !same) rc = 1;
+            remove("KKM.rms");
+        }
         game_paint(lcd_fb);
         dump("diag_spawn.bmp");
         // Teleport 2 cells in front of the row (no ticks: records stay
@@ -149,8 +177,10 @@ int main(int argc, char **argv)
             game_paint(lcd_fb);
             printf("diag key/warp/life contribution = %d px (hidden %d bills)\n",
                    best, nsav);
-            // fixed build ~120 px; with the billboard_tex regression ~16
-            if (best < 50 || nsav < 6) rc = 1;
+            /* The showroom carries exactly one key/warp/life (single-
+               placement types): 3 hidden bills, ~60 px across the 4 spin
+               phases; with the billboard_tex regression only ~16 remain. */
+            if (best < 40 || nsav < 3) rc = 1;
         }
         for (int y = 0; y < 65; y++) {
             for (int x = 0; x < 96; x++) {

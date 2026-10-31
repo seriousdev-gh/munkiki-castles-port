@@ -155,6 +155,51 @@ static void shell_lifecycle(void)
     printf("shell lifecycle: done\n");
 }
 
+// save->resume must reproduce the whole voxel world exactly: every block
+// shape, every collectible (note/key/warp/life), and the falling-channel
+// cells (64/128, which carry neither shape nor item bits so a decode-time
+// "type present" tally misses them). A regression that flagged each type
+// from a stale count dropped the channel cells and desynced the bit-tied
+// stream whenever a single-place item had been collected (the "key/heart
+// vanishes after Continue" bug). Also exercised with one item picked up.
+static void save_resume_integrity(void)
+{
+    static int8_t cl0[2048];
+    int worst = 0, worst_id = 0;
+    for (int pass = 0; pass < 2; pass++) {   // 0 = pristine, 1 = after a pickup
+        for (int i = 0; i < MK_LEVELS; i++) {
+            int id = mk_level_ids[i];
+            if (id > 30) continue;           // real levels only (skip 90..95 debug)
+            mk_load_level(id);
+            int target = -1;
+            if (pass == 1) {                 // clear one collectible cell
+                for (int c = 0; c < 2048; c++) {
+                    int it = mk_cl[c] & MK_CELL_ITEM_MASK;
+                    if (it == 16 || it == 24 || it == 32) {   // key / warp / life
+                        mk_cl[c] &= (int8_t)~MK_CELL_ITEM_MASK;
+                        mk_ck[c] = 0;
+                        target = c;
+                        break;
+                    }
+                }
+                if (target < 0) continue;    // level has none of those to drop
+            }
+            memcpy(cl0, mk_cl, sizeof cl0);
+            mk_save_run();
+            mk_resume_run();
+            int diff = 0;
+            for (int c = 0; c < 2048; c++)
+                if (cl0[c] != mk_cl[c]) diff++;
+            if (diff > worst) { worst = diff; worst_id = id; }
+            CHECK(diff == 0,
+                  "save/resume lost %d cells on level %d (%s)", diff, id,
+                  pass ? "after pickup" : "pristine");
+            remove("KKM.rms");
+        }
+    }
+    printf("save/resume world integrity: worst=%d cells (level %d)\n", worst, worst_id);
+}
+
 int main(void)
 {
     mk_load_tables();
@@ -176,6 +221,8 @@ int main(void)
         CHECK(g_dungeon.spawn_dat_h > 0, "level %d: spawn below floor", id);
     }
     printf("levels decoded: %d/%d\n", levels_tested, MK_LEVELS);
+
+    save_resume_integrity();
 
     // ---- walking: pressing '2' must complete an action, move the monkey
     //      (or turn on an obstacle) and advance the move counter or anim

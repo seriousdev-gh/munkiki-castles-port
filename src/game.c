@@ -1684,9 +1684,15 @@ static void mk_diag_level(void)
     for (int x = 0; x < MK_GRID_W; x++)            // solid floor, layer 0
         for (int z = 0; z < MK_GRID_D; z++)
             mk_cl[x + z * MK_CELL_STEP_Z] = 1;
-    // shape showroom row at z=10: block(x,1,10) shape s, item rides on top
+    // shape showroom row at z=10: block(x,1,10) shape s, item rides on top.
+    // Key(16), warp(24) and life(32) are SINGLE-placement cell types: the
+    // world bitstream carries exactly one (x,y,z) per type, so the showroom
+    // must hold at most one of each or a save/resume cannot round-trip them
+    // (the run encoder's scan would emit one triple and the extra cells
+    // would silently vanish on Continue). Notes are rect-filled: multiples
+    // are fine, so the remaining slots show the note glyph again.
     static const int shape_of[7] = { 1, 2, 3, 4, 5, 6, 7 };
-    static const int item_of[7]  = { 8, 16, 24, 32, 8, 16, 32 };
+    static const int item_of[7]  = { 8, 16, 24, 32, 8, 8, 8 };
     for (int i = 0; i < 7; i++) {
         int x = 2 + i;
         mk_cl[x + 10 * MK_CELL_STEP_Z + MK_CELL_STEP_H] = (int8_t)shape_of[i];
@@ -1694,7 +1700,7 @@ static void mk_diag_level(void)
     }
     mk_cl[12 + 10 * MK_CELL_STEP_Z + MK_CELL_STEP_H] = 1;
     mk_cl[12 + 10 * MK_CELL_STEP_Z + 2 * MK_CELL_STEP_H] = 1;
-    mk_cl[12 + 10 * MK_CELL_STEP_Z + 3 * MK_CELL_STEP_H] = 32; // life on 2-stack
+    mk_cl[12 + 10 * MK_CELL_STEP_Z + 3 * MK_CELL_STEP_H] = 8;  // note on 2-stack
     mk_cl[13 + 10 * MK_CELL_STEP_Z + 2 * MK_CELL_STEP_H] = 8;  // note floating
     g_dungeon.pos_x = 8 * MK_ONE;
     g_dungeon.pos_h = 1 * MK_ONE;
@@ -1704,6 +1710,11 @@ static void mk_diag_level(void)
     g_dungeon.spawn_dat_x = g_dungeon.spawn_cur_x = 8;
     g_dungeon.spawn_dat_h = g_dungeon.spawn_cur_h = 1;
     g_dungeon.spawn_dat_z = g_dungeon.spawn_cur_z = 5;
+    // The spawn cell must ALSO carry the marker bits in cl: the run encoder
+    // scans cl for the (40) marker to persist the respawn cell (ap() scans
+    // too; level streams always carry it). Without it a save written before
+    // the first move has no marker and Continue respawns from stale spawn_dat.
+    mk_cl[8 + 5 * MK_CELL_STEP_Z + 1 * MK_CELL_STEP_H] |= MK_CELL_SPAWN_MARK;
     g_dungeon.level_notes = 0;
     g_dungeon.notes_left = 0;
     g_dungeon.status = 0;

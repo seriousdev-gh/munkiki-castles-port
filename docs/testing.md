@@ -17,7 +17,7 @@ build-nob\scene_shot.exe       # headless scene renders -> sc_*.bmp for visual r
 | `inblock` | camera inside a block cell renders transparent (GL_BACK winding cull); rc=1 if a wall appears |
 | `warp` | showroom portal close-up: front/edge-on/back dumps (`warp_ph*.bmp`); rc=1 if the quad stops contributing pixels (front-vs-edge diff <140; 169 with portal, 119 without) |
 | `notes` | note billboard spin-rate + round alpha-mask pass (key/warp/life pixels are gated by `diag`) |
-| `diag` | MK_DIAG showroom boots and renders; key/warp/life billboards must contribute pixels (hide-and-diff across 4 spin phases; rc=1 if they vanish - a regression once left all but notes invisible) |
+| `diag` | MK_DIAG showroom boots and renders; save/resume round-trip: zeroed spawn_dat + `mk_resume_run` must restore the grid cell-identically AND respawn the monkey at its pre-save cell (a showroom missing the (40) marker in cl resumes at (0,0,0) - the "Continue spawned me somewhere else" bug); key/warp/life billboards must contribute pixels (hide-and-diff across 4 spin phases; rc=1 if they vanish - a regression once left all but notes invisible). The showroom carries at most one key/warp/life: those cell types are single-placement in the world bitstream, multiples cannot round-trip |
 | `pr` | pause -> save -> resume boot round-trip |
 
 Under WSL2 the headless frames are byte-identical to the MSVC build
