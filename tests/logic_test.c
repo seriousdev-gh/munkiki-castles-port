@@ -80,18 +80,18 @@ static void shell_lifecycle(void)
     CHECK(game_dbg(4) == 0, "menu: DOWN wrap failed (%d)", game_dbg(4));
     // Options form (port addition): 3 rows Sounds/Lights/Dithering; arrows move
     // the row cursor (DOWN wraps mod 3), select toggles the row. On == device
-    // halftone (1); the device look is the port default on a fresh boot.
+    // halftone (1); a fresh boot defaults to smooth gray (dither OFF).
     tap('4');                                    // digit jumps to "Options"
     CHECK(game_dbg(4) == 3, "menu: digit 4 did not jump to Options (sel=%d)", game_dbg(4));
     soft(0);                                     // open the options form
     CHECK(game_dbg(1) == 27, "options form did not open (ai=%d)", game_dbg(1));
-    CHECK(game_dither() == 1, "fresh boot: dithering must default ON (%d)", game_dither());
+    CHECK(game_dither() == 0, "fresh boot: dithering must default OFF (%d)", game_dither());
     tap(-7); tap(-7);                            // DOWN DOWN -> Dithering row
     CHECK(game_dbg(16) == 2, "options: row cursor did not reach Dithering (%d)", game_dbg(16));
-    soft(0);                                     // toggle Off
-    CHECK(game_dither() == 0, "dithering toggle Off failed (%d)", game_dither());
-    soft(0);                                     // toggle On
+    soft(0);                                     // toggle On (device halftone)
     CHECK(game_dither() == 1, "dithering toggle On failed (%d)", game_dither());
+    soft(0);                                     // toggle Off (leave state default)
+    CHECK(game_dither() == 0, "dithering toggle Off failed (%d)", game_dither());
     tap(-7);                                     // DOWN wraps to row 0 (Sounds)
     CHECK(game_dbg(16) == 0, "options: cursor did not wrap (%d)", game_dbg(16));
     soft(0);                                     // toggle Sounds off...
@@ -131,6 +131,20 @@ static void shell_lifecycle(void)
     CHECK(game_dbg(1) == 24, "Enter no longer opens pause in dungeon (ai=%d)", game_dbg(1));
     tap(-1); run(20);                                  // Return to game
     CHECK(game_dbg(1) == 0 && game_dbg(0) == 2, "resume after Enter pause failed");
+    // Options in the pause menu (port addition): 4th item opens the form from
+    // the dungeon; Back returns to PAUSE (not the main menu) with the game
+    // screen restored; "Return to game" then resumes the dungeon.
+    game_key(-1, 1); run(2); game_key(-1, 0); run(4);  // pause
+    tap('4'); run(2);                                  // digit jump -> Options item
+    CHECK(game_dbg(4) == 3, "pause: digit 4 did not jump to Options (sel=%d)", game_dbg(4));
+    soft(0); run(10);                                  // select opens the options form
+    CHECK(game_dbg(1) == 27, "pause Options did not open the form (ai=%d)", game_dbg(1));
+    tap(-2); run(10);                                  // right soft: back to pause
+    CHECK(game_dbg(1) == 24, "options Back did not return to pause (ai=%d)", game_dbg(1));
+    soft(0); run(20);                                  // Return to game (item 0)
+    CHECK(game_dbg(1) == 0 && game_dbg(0) == 2 && game_dbg(2) == 2,
+          "pause-options round-trip lost the dungeon (ai=%d ab=%d screen=%d)",
+          game_dbg(1), game_dbg(0), game_dbg(2));
     int level_no_saved = g_dungeon.level_no, moves_saved = g_dungeon.moves, lives_saved = g_dungeon.lives;
     game_init();                                 // app restart with save
     run(20);

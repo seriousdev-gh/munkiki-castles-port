@@ -61,7 +61,8 @@ The keyboard maps onto the phone keypad of the 3410:
 | Enter              | left soft key (Select)                         |
 | Backspace          | right soft key (Back)                          |
 | Esc                | close window                                   |
-| F8                 | toggle 1bpp device halftone (on -> off); main toggle is Options -> Dithering |
+| F8                 | toggle 1bpp device halftone (default: off); main toggle is Options -> Dithering |
+| F7                 | toggle LCD backlight tint (device "Lights"; same as Options -> Lights) |
 | F10                | dump the live LCD frame to `mk_live.bmp`       |
 
 ## Repository layout

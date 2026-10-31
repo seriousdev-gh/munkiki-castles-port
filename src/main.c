@@ -217,6 +217,10 @@ static void poll_input(void)
     // backspace = right soft key (back)
     if (IsKeyPressed(KEY_BACKSPACE))  game_key(J2M_SOFT_BACK, 1);
     if (IsKeyReleased(KEY_BACKSPACE)) game_key(J2M_SOFT_BACK, 0);
+    if (IsKeyPressed(KEY_F7)) {
+        game_set_lights(!game_lights());          // debug toggle, mirrors Options -> Lights
+        fprintf(stderr, "LIGHTS=%d\n", game_lights()); fflush(stderr);
+    }
     if (IsKeyPressed(KEY_F8)) {
         game_set_dither((game_dither() + 1) % 2);   // debug toggle, mirrors the menu option
         fprintf(stderr, "DITHER=%d\n", game_dither()); fflush(stderr);

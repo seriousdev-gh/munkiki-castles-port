@@ -38,8 +38,10 @@ int game_dbg(int what);
 
 // "Lights" option state (KKM.j) -> shell tints the LCD green (backlight proto).
 int game_lights(void);
+void game_set_lights(int on);           // shell debug key F7 toggles 0<->1
 
 // Display dithering (port-only option in the Options menu; F8 debug toggles).
+// Default is OFF (smooth gray); the device halftone is opt-in.
 int game_dither(void);                  // 0 off, 1 device halftone (measured 4x4 matrix)
 void game_set_dither(int mode);
 

@@ -66,4 +66,5 @@ the same view `scene_shot diag` prints as ASCII; setting `MK_AUTONAV=1` before
 launch plays a scripted navigation (it also dumps the LCD frame); `MK_SCR=1`
 traces key input and state to stderr, `MK_TRI=1` the full M3D triangle
 pipeline (projection, winding-cull skips, `NPKILL` lines for near-plane
-drops); `F8` toggles the LCD halftone dither.
+drops); `F8` toggles the LCD halftone dither (default off — smooth gray),
+`F7` toggles the backlight tint (device "Lights").

@@ -553,8 +553,11 @@ static int g_ui_id;                          // UI/menu id (0 = canvas visible)
 static int g_sub_state;                          // in-game sub state
 static int g_screen_t, g_intro_page;
 static int g_screen_dirty, g_save_exists, g_demo_scripted, g_paused, g_destroyed;
-static int g_sound_on = 1, g_lights_on = 0, g_dither_mode = 1;  // KKM.k sound, KKM.j lights;
+static int g_options_from_pause;        // Options opened from MENU_PAUSE: Back returns there
+static int g_sound_on = 1, g_lights_on = 0, g_dither_mode = 0;  // KKM.k sound, KKM.j lights;
                                                             // dither: port-only display option
+                                                            // (smooth gray is the default; the
+                                                            // device halftone is opt-in)
 static int g_bonus_key, g_bonus_last_lvl, g_bonus_keynote, g_bonus_par;            // bonus counters
 static int g_hiscore_second, g_hiscore_best;                      // hiscores ("MKK")
 static int g_ak_active;                   // KKM.ak != null
@@ -599,7 +602,7 @@ static void opt_load(void)                // KKM.h()
             signed char lvl = (signed char)b[2];
             mk_start_level = (mk_level_index(lvl) >= 0) ? lvl : 1;
         }
-        g_dither_mode = (n >= 4) ? (b[3] == 0 ? 0 : 1) : 1;   // legacy 1/2 modes map onto device halftone
+        g_dither_mode = (n >= 4) ? (b[3] == 0 ? 0 : 1) : 0;   // explicit legacy 1/2 stays on; no field = default off
     } else {
         g_sound_on = 1; g_lights_on = 0; mk_start_level = 1;  // exception defaults
     }
@@ -1325,6 +1328,12 @@ static void command_action(int cmd, int sel)
             g_destroyed = 1;
             g_paused = 1;
             mark_visible_region(0, 0);
+        } else if (g_ui_id == MENU_OPTIONS && g_options_from_pause) {
+            // entered from the pause menu: Back returns there and restores the
+            // game screen behind it (nav(MENU_OPTIONS) set SCREEN_NONE)
+            g_options_from_pause = 0;
+            g_screen_id = SCREEN_GAME;
+            nav(MENU_PAUSE);
         } else {
             nav(MENU_MAIN);
         }
@@ -1338,6 +1347,7 @@ static void command_action(int cmd, int sel)
             case 0: set_substate(SUB_PLAY); return;
             case 1: die(); return;
             case 2: nav(MENU_MAIN); return;
+            case 3: g_options_from_pause = 1; nav(MENU_OPTIONS); return;
             default: return;
             }
         case MENU_MAIN:
@@ -1411,6 +1421,7 @@ static void nav(int v)
         menu_item(&g_menu, g_strings[18], 0);
         menu_item(&g_menu, g_strings[g_dungeon.lives == 0 ? 21 : 19], 0);
         menu_item(&g_menu, g_strings[20], 0);
+        menu_item(&g_menu, g_strings[22], 0);     // port: Options in place (dither/lights/sound)
         break;
     case MENU_MAIN:
         g_screen_id = SCREEN_NONE;
@@ -1823,6 +1834,11 @@ int game_dbg(int what)
 int game_lights(void)                     // shell: LCD backlight emulation tint
 {
     return g_lights_on;
+}
+
+void game_set_lights(int on)             // shell debug key F7 toggles 0<->1
+{
+    g_lights_on = on ? 1 : 0;
 }
 
 int game_dither(void)                    // display dither mode (0 off, 1 device halftone)
