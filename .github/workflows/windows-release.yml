@@ -1,0 +1,65 @@
+# Windows build -> GitHub Release with munkiki.exe attached.
+# Mirrors docs/building.md "Windows (MSVC)": pinned raylib in vendor/raylib
+# built with cmake, nob bootstrapped under vcvars64, `nob munkiki`.
+# Tag push (v*) publishes/updates the Release for that tag; a manual
+# (workflow_dispatch) run only stores the workflow artifact.
+name: windows build -> Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write    # create the Release and upload its asset
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch raylib (pinned to the commit this port is verified against)
+        uses: actions/checkout@v4
+        with:
+          repository: raysan5/raylib
+          ref: 1026cb96452e6cf2ccfe5af5c44b1992d0ffae29
+          path: vendor/raylib
+
+      - name: Build raylib static lib (nob links vendor\raylib\build\raylib\Release\raylib.lib)
+        run: |
+          cmake -S vendor\raylib -B vendor\raylib\build
+          cmake --build vendor\raylib\build --config Release --target raylib
+
+      - name: Bootstrap nob (cl from vcvars64)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          mkdir build-nob
+          cl /nologo /Fe:build-nob\nob.exe nob.c
+
+      - name: Build munkiki.exe (nob finds vcvars64 itself)
+        shell: cmd
+        run: build-nob\nob.exe munkiki
+
+      - name: Smoke check (exe was produced)
+        shell: pwsh
+        run: |
+          Get-Item build-nob\munkiki.exe | Select-Object Name, Length
+          if (-not (Test-Path build-nob\munkiki.exe)) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: munkiki-windows-${{ github.ref_name }}
+          path: build-nob/munkiki.exe
+
+      - name: Publish Release with munkiki.exe
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: build-nob/munkiki.exe
